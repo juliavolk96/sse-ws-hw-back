@@ -37,6 +37,7 @@ app.post("/new-user", async (request, response) => {
       name: name,
     };
     userState.push(newUser);
+    console.log(`User entered the chat and saved on the server: ${JSON.stringify(newUser)}`);
     const result = {
       status: "ok",
       user: newUser,
@@ -89,25 +90,32 @@ app.delete('/user/:id', (req, res) => {
 const server = http.createServer(app);
 const wsServer = new WebSocketServer({ server });
 wsServer.on("connection", (ws) => {
+  let currentUser = null;
+
   ws.on("message", (msg, isBinary) => {
     const receivedMSG = JSON.parse(msg);
     console.dir(receivedMSG);
-    if (receivedMSG.type === "exit") {
-      const idx = userState.findIndex(
-        (user) => user.name === receivedMSG.user.name
-      );
-      userState.splice(idx, 1);
-      [...wsServer.clients]
-        .filter((o) => o.readyState === WebSocket.OPEN)
-        .forEach((o) => o.send(JSON.stringify(userState)));
-      return;
-    }
     if (receivedMSG.type === "send") {
+      if (receivedMSG.user && receivedMSG.user.id) {
+        currentUser = receivedMSG.user.id;
+      }
       [...wsServer.clients]
         .filter((o) => o.readyState === WebSocket.OPEN)
         .forEach((o) => o.send(msg, { binary: isBinary }));
     }
   });
+
+  ws.on('close', () => {
+    const idx = userState.findIndex((user) => user.id === currentUser);
+    if (idx !== -1) {
+      console.log(`User exited the chat and removed from the server: ${JSON.stringify(userState[idx])}`);
+      userState.splice(idx, 1);
+      [...wsServer.clients]
+        .filter((o) => o.readyState === WebSocket.OPEN)
+        .forEach((o) => o.send(JSON.stringify(userState)));
+    }
+  });
+
   [...wsServer.clients]
     .filter((o) => o.readyState === WebSocket.OPEN)
     .forEach((o) => o.send(JSON.stringify(userState)));
